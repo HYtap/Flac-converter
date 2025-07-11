@@ -1,0 +1,247 @@
+# Made by Adrian and ChatGPT for Friends 
+# Author: Adrian, ChatGPT
+# Date: 11.07.2025
+
+import os
+import sys
+from tkinter import filedialog, messagebox
+from tkinterdnd2 import TkinterDnD
+from threading import Thread
+import ttkbootstrap as tb
+from pydub import AudioSegment
+import platform
+
+SUPPORTED_FORMATS = ["wav", "mp3", "ogg", "flac"]
+
+LANGUAGES = {
+    "de": {
+        "title": "FLAC-Konverter",
+        "source": "Quellordner:",
+        "target": "Zielordner:",
+        "format": "Zielformat:",
+        "browse": "Durchsuchen",
+        "convert": "Konvertieren",
+        "cancel": "Abbrechen",
+        "status_ready": "",
+        "status_running": "Konvertierung läuft...",
+        "status_done": "Fertig!",
+        "status_canceled": "Abgebrochen",
+        "copy": "© 2025 New_Adventure",
+        "no_files": "Keine FLAC-Dateien im Quellordner gefunden.",
+        "error_source": "Der Quellordner existiert nicht.",
+        "error_target": "Bitte Zielordner angeben.",
+        "done": "Alle Dateien wurden erfolgreich konvertiert.",
+    },
+    "en": {
+        "title": "FLAC Converter",
+        "source": "Source folder:",
+        "target": "Target folder:",
+        "format": "Output format:",
+        "browse": "Browse",
+        "convert": "Convert",
+        "cancel": "Cancel",
+        "status_ready": "",
+        "status_running": "Converting...",
+        "status_done": "Done!",
+        "status_canceled": "Canceled",
+        "copy": "© 2025 New_Adventure",
+        "no_files": "No FLAC files found in the source folder.",
+        "error_source": "The source folder does not exist.",
+        "error_target": "Please select a target folder.",
+        "done": "All files were converted successfully.",
+    }
+}
+
+def is_dark_mode():
+    if platform.system() == "Windows":
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+                value = winreg.QueryValueEx(key, "AppsUseLightTheme")[0]
+                return value == 0
+        except:
+            return False
+    return False  # Für andere OS Standard: Light
+
+class FLACConverterGUI:
+    def __init__(self, root, style):
+        self.root = root
+        self.style = style
+        self.language = "de"
+        self.lang = LANGUAGES[self.language]
+        self.source_folder = tb.StringVar()
+        self.target_folder = tb.StringVar()
+        self.output_format = tb.StringVar(value="wav")
+        self.cancel_flag = False
+        self.build_ui()
+
+    def build_ui(self):
+        # Hauptframe mit allen anderen Widgets (ohne Copyright)
+        frame = tb.Frame(self.root, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        # Spalten konfigurieren
+        frame.columnconfigure(0, weight=0, minsize=100)
+        frame.columnconfigure(1, weight=1)
+        frame.columnconfigure(2, weight=0)
+
+        # Sprache wählen
+        tb.Label(frame, text="Language:").grid(row=6, column=0, sticky="w", padx=(0, 5), pady=10)
+        lang_menu = tb.Combobox(frame, values=["Deutsch", "English"], state="readonly")
+        lang_menu.current(0)
+        lang_menu.grid(row=6, column=1, sticky="w", padx=5, pady=5)
+        lang_menu.bind("<<ComboboxSelected>>", self.change_language)
+
+        # Quellordner
+        self.source_label = tb.Label(frame, text=self.lang["source"])
+        self.source_label.grid(row=1, column=0, sticky="w", pady=5)
+        tb.Entry(frame, textvariable=self.source_folder).grid(row=1, column=1, sticky="ew", pady=5)
+        self.browse_source_button = tb.Button(frame, text=self.lang["browse"], command=self.browse_source)
+        self.browse_source_button.grid(row=1, column=2, padx=5)
+
+        # Zielordner
+        self.target_label = tb.Label(frame, text=self.lang["target"])
+        self.target_label.grid(row=2, column=0, sticky="w", pady=5)
+        tb.Entry(frame, textvariable=self.target_folder).grid(row=2, column=1, sticky="ew", pady=5)
+        self.browse_target_button = tb.Button(frame, text=self.lang["browse"], command=self.browse_target)
+        self.browse_target_button.grid(row=2, column=2, padx=5)
+
+        # Zielformat
+        self.format_label = tb.Label(frame, text=self.lang["format"])
+        self.format_label.grid(row=3, column=0, sticky="w", pady=5)
+        tb.Combobox(frame, textvariable=self.output_format, values=SUPPORTED_FORMATS, state="readonly").grid(row=3, column=1, sticky="w")
+
+        # Fortschritt
+        self.progress = tb.Progressbar(frame, orient="horizontal", length=400, mode="determinate")
+        self.progress.grid(row=4, column=0, columnspan=3, pady=(20, 5), sticky="ew")
+
+        # Status (direkt unter Progressbar)
+        self.status_label = tb.Label(frame, text=self.lang["status_ready"], font=("Segoe UI", 9, "italic"), bootstyle="secondary")
+        self.status_label.grid(row=5, column=0, columnspan=3, pady=(0, 10), sticky="w")
+
+        # Button Konvertieren
+        self.convert_button = tb.Button(frame, text=self.lang["convert"], bootstyle="success", command=self.start_conversion)
+        self.convert_button.grid(row=6, column=2, pady=10, sticky="e")
+
+        frame.columnconfigure(1, weight=1)
+
+        # Unsichtbare Drag&Drop-Fläche
+        self.root.drop_target_register("DND_Files")
+        self.root.dnd_bind('<<Drop>>', self.handle_drop)
+
+        # Copyright unten im Fenster, außerhalb des Frames fixiert
+        self.copy_label = tb.Label(self.root, text=self.lang["copy"], font=("Segoe UI", 8), anchor="w")
+        self.copy_label.pack(side="bottom", fill="x", padx=20, pady=(0, 10))
+
+
+    def change_language(self, event=None):
+        selected = event.widget.get()
+        self.language = "de" if selected == "Deutsch" else "en"
+        self.lang = LANGUAGES[self.language]
+        self.update_labels()
+
+    def update_labels(self):
+        self.root.title(self.lang["title"])
+        self.source_label.config(text=self.lang["source"])
+        self.target_label.config(text=self.lang["target"])
+        self.format_label.config(text=self.lang["format"])
+        self.browse_source_button.config(text=self.lang["browse"])
+        self.browse_target_button.config(text=self.lang["browse"])
+        self.convert_button.config(text=self.lang["convert"])
+        self.copy_label.config(text=self.lang["copy"])
+        self.status_label.config(text=self.lang["status_ready"])
+
+    def browse_source(self):
+        d = filedialog.askdirectory(title=self.lang["source"])
+        if d:
+            self.source_folder.set(d)
+
+    def browse_target(self):
+        d = filedialog.askdirectory(title=self.lang["target"])
+        if d:
+            self.target_folder.set(d)
+
+    def handle_drop(self, event):
+        path = event.data.strip("{}")
+        if os.path.isdir(path):
+            self.source_folder.set(path)
+
+    def start_conversion(self):
+        if self.convert_button.cget("text") == self.lang["convert"]:
+            self.cancel_flag = False
+            self.convert_button.config(text=self.lang["cancel"], bootstyle="danger")
+            Thread(target=self.convert).start()
+        else:
+            # Abbruch gewünscht
+            self.cancel_flag = True
+            self.status_label.config(text="Abbruch wird ausgeführt...")
+
+    def convert(self):
+        src = self.source_folder.get()
+        tgt = self.target_folder.get()
+        fmt = self.output_format.get().lower()
+
+        if not os.path.isdir(src):
+            messagebox.showerror(self.lang["title"], self.lang["error_source"])
+            self.reset_button()
+            return
+
+        if not tgt:
+            messagebox.showerror(self.lang["title"], self.lang["error_target"])
+            self.reset_button()
+            return
+
+        os.makedirs(tgt, exist_ok=True)
+
+        flac_files = [f for f in os.listdir(src) if f.lower().endswith(".flac")]
+        if not flac_files:
+            messagebox.showinfo(self.lang["title"], self.lang["no_files"])
+            self.reset_button()
+            return
+
+        self.progress["maximum"] = len(flac_files)
+        self.progress["value"] = 0
+        self.status_label.config(text=self.lang["status_running"])
+
+        for i, file in enumerate(flac_files, 1):
+            if self.cancel_flag:
+                self.status_label.config(text=self.lang["status_canceled"])
+                messagebox.showinfo(self.lang["title"], self.lang["status_canceled"])
+                self.reset_button()
+                return
+            try:
+                in_path = os.path.join(src, file)
+                out_file = os.path.splitext(file)[0] + f".{fmt}"
+                out_path = os.path.join(tgt, out_file)
+                audio = AudioSegment.from_file(in_path, format="flac")
+                audio.export(out_path, format=fmt)
+            except Exception as e:
+                messagebox.showerror("Fehler", f"Fehler bei {file}:\n{e}")
+            finally:
+                self.progress["value"] = i
+                self.status_label.config(text=f"{self.lang['status_running']} ({i} / {len(flac_files)})")
+                self.root.update_idletasks()
+
+        self.status_label.config(text=self.lang["status_done"])
+        messagebox.showinfo(self.lang["title"], self.lang["done"])
+        self.reset_button()
+
+    def reset_button(self):
+        self.convert_button.config(text=self.lang["convert"], bootstyle="success")
+
+# --- Hauptfenster starten ---
+if __name__ == "__main__":
+    theme = "darkly" if is_dark_mode() else "flatly"
+    app = TkinterDnD.Tk()
+    app.title("FLAC-Konverter")
+    app.geometry("600x300")
+    app.resizable(False, False)
+    try:
+        app.iconbitmap("ico.ico")
+    except Exception:
+        pass
+    style = tb.Style(theme=theme)
+
+    FLACConverterGUI(app, style)
+    app.mainloop()
