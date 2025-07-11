@@ -9,6 +9,9 @@ A simple tool to convert `.flac` audio files into:
 
 This project was created with the help of ChatGPT.
 
+<img width="604" height="336" alt="grafik" src="https://github.com/user-attachments/assets/0a696144-7bdf-4497-b45e-0cbe4540d313" />
+
+
 ## 💻 How to Use
 
 1. Download the executable (`Flac-Converter.exe`) from the [releases](#) section.
@@ -39,6 +42,9 @@ Ein einfaches Tool, um `.flac`-Dateien in folgende Formate umzuwandeln:
 - `.flac` (erneute Kodierung)
 
 Das Programm wurde mit Hilfe von ChatGPT erstellt.
+
+<img width="608" height="338" alt="grafik" src="https://github.com/user-attachments/assets/e436ede0-52d4-4826-b09a-69daa8255d79" />
+
 
 ### ✅ Verwendung
 
